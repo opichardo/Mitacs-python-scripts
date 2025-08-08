@@ -1,0 +1,302 @@
+# Vacancy Defect Calculation Tools
+
+A collection of Python scripts for generating and monitoring vacancy defect calculations in computational materials science. These tools automate the creation of systematic vacancy defect structures and provide quality control for high-throughput simulations.
+
+## Scripts Overview
+
+### 1. `vacancy_generator.py` - Systematic Vacancy Generator
+Creates vacancy defect structures by systematically removing each atom from a crystal structure and sets up complete computational environments for LAMMPS/SLURM calculations.
+
+### 2. `check.py` - Energy Verification Tool
+Monitors and verifies that vacancy calculations have completed successfully by checking for energy data in output files.
+
+## Requirements
+
+- Python 3.6+
+- pymatgen library
+- SLURM workload manager (for job submission)
+- `file_generator.py` module (included in this repository)
+
+```bash
+pip install pymatgen
+```
+
+## Required Files
+
+### For Vacancy Generator:
+- `pot26.mtp` - Machine learning interatomic potential
+- `mlip.ini` - MLIP configuration file
+- `file_generator.py` - Custom module with functions:
+  - `submit_slurm_job()`
+  - `generate_job_sh()`
+  - `generate_lammps_input()`
+  - `write_artn_in()`
+
+**All required files are included in this repository.**
+
+## Usage
+
+### Generating Vacancy Defects
+
+Create systematic vacancy structures from a crystal:
+
+```bash
+python vacancy_generator.py crystal.xyz
+```
+
+**What it does:**
+1. Reads the original crystal structure from XYZ file
+2. Creates N separate vacancy structures (where N = number of atoms)
+3. For each vacancy, generates a folder `vac_0`, `vac_1`, etc.
+4. Sets up complete calculation environment in each folder
+5. Automatically submits SLURM jobs for each vacancy
+
+**Output structure:**
+```
+vac_0/
+├── mol_vac.xyz      # Vacancy structure in XYZ format
+├── mol_vac.lmp      # Vacancy structure in LAMMPS format
+├── script_job.sh    # SLURM job submission script
+├── lammps.in        # LAMMPS input file
+├── artn.in          # ARTN method configuration
+├── pot26.mtp        # Machine learning potential (copied)
+└── mlip.ini         # MLIP configuration (copied)
+
+vac_1/
+├── ... (same structure)
+
+vac_N/
+├── ... (same structure)
+```
+
+### Monitoring Calculation Progress
+
+Check which vacancy calculations have completed successfully:
+
+```bash
+python check.py
+```
+
+**Features:**
+- Scans all `vac_*` folders in the current directory
+- Checks for presence of `out.run` files
+- Verifies energy data in output files
+- Provides detailed status reports
+- Identifies problematic calculations
+
+**Sample output:**
+```
+=== Energy Checker for out.run ===
+
+Checking 48 vac_* folders...
+
+FOLDERS WITHOUT ENERGIES IN out.run:
+==================================================
+
+❌ Folders without out.run file (3):
+   vac_12
+   vac_25
+   vac_41
+
+❌ Folders with out.run but without energies (2):
+   vac_7 - 0.5 KB
+   vac_18 - empty file
+
+SUMMARY:
+  Total vac_* folders: 48
+  Folders with problems: 5
+  Folders OK: 43
+
+⚠️  5 folders require attention.
+```
+
+## Energy Detection Patterns
+
+The energy checker looks for these patterns in `out.run` files:
+
+- **Total Energy**: `Total energy (eV) = -123.45`
+- **Cohesive Energy**: `Cohesive energy (eV) = -4.56`
+- **Potential Energy Data**: `PotEng -789.12`
+- **Energy Headers**: `Step PotEng` (table headers)
+
+## Workflow Example
+
+### Complete Vacancy Study Workflow:
+
+1. **Prepare input structure:**
+   ```bash
+   # Ensure you have your crystal structure
+   ls crystal.xyz
+   
+   # The file_generator.py module is included in this repository
+   # Only need to provide the machine learning potential files
+   ls pot26.mtp mlip.ini
+   ```
+
+2. **Generate vacancy defects:**
+   ```bash
+   python vacancy_generator.py crystal.xyz
+   # Creates vac_0/, vac_1/, ..., vac_N/ folders
+   # Submits jobs automatically
+   ```
+
+3. **Monitor job progress:**
+   ```bash
+   # Check SLURM queue
+   squeue -u $USER
+   
+   # Check calculation status
+   python check.py
+   ```
+
+4. **Resubmit failed jobs:**
+   ```bash
+   # For jobs that failed or didn't complete
+   cd vac_7
+   sbatch script_job.sh
+   cd ..
+   ```
+
+5. **Final verification:**
+   ```bash
+   python check.py
+   # Should show all folders OK
+   ```
+
+## Configuration
+
+### SLURM Job Settings (in vacancy_generator.py):
+```python
+generate_job_sh(
+    time="0-00:30:00",    # 30 minutes
+    num_task=2,           # 2 tasks
+    num_core=2,           # 2 cores per task
+    mem_per_cpu="4G",     # 4GB memory per CPU
+    file_name=job_sh_path
+)
+```
+
+### Lattice Handling:
+- Automatically extracts lattice vectors from XYZ comment lines
+- Supports both periodic and molecular boundary conditions
+- Format: `Lattice="a1 a2 a3 b1 b2 b3 c1 c2 c3"`
+
+## File Formats
+
+### Input XYZ Format:
+```
+48
+Lattice="10.26 0.0 0.0 0.0 10.26 0.0 0.0 0.0 10.26"
+Si    0.000000    0.000000    0.000000
+Si    2.565000    2.565000    0.000000
+...
+```
+
+### Generated LAMMPS Format:
+```
+LAMMPS data file generated by script
+
+47 atoms
+1 atom types
+
+0.000000 10.260000 xlo xhi
+0.000000 10.260000 ylo yhi
+0.000000 10.260000 zlo zhi
+
+Masses
+
+1 28.0855
+
+Atoms # atomic
+
+1 1 2.565000 2.565000 0.000000
+2 1 5.130000 0.000000 2.565000
+...
+```
+
+## Applications
+
+### Defect Formation Energy Studies:
+- Calculate vacancy formation energies
+- Study defect migration pathways
+- Investigate defect clustering
+- Analyze electronic structure effects
+
+### High-Throughput Screening:
+- Systematic defect studies across material classes
+- Automated quality control for large calculation sets
+- Statistical analysis of defect properties
+
+## Error Handling
+
+### Common Issues and Solutions:
+
+**Missing required files:**
+```bash
+FileNotFoundError: Required file pot26.mtp not found!
+```
+*Solution: Ensure all required files are in the current directory*
+
+**Job submission failures:**
+- Check SLURM configuration and availability
+- Ensure `file_generator.py` is in the same directory
+- Verify cluster resource availability
+
+**Energy detection failures:**
+- Jobs may still be running
+- Check for calculation errors in output files
+- Verify LAMMPS input parameters
+
+## Troubleshooting
+
+### Debugging Failed Calculations:
+```bash
+# Check specific folder
+cd vac_12
+ls -la
+cat out.run
+cat slurm-*.out  # SLURM output log
+
+# Check job status
+sacct -j JOB_ID
+```
+
+### Manual Job Resubmission:
+```bash
+# For specific failed jobs
+cd vac_X
+sbatch script_job.sh
+
+# For multiple failed jobs
+for dir in vac_7 vac_18 vac_25; do
+    cd $dir
+    sbatch script_job.sh
+    cd ..
+done
+```
+
+## Performance Considerations
+
+- **Memory usage**: Each vacancy calculation typically requires 2-8 GB RAM
+- **Runtime**: Depends on system size and calculation method (typically 10-60 minutes)
+- **Storage**: Each vacancy folder uses ~10-100 MB depending on output verbosity
+- **Scaling**: Suitable for systems with 10-1000 atoms
+
+## Limitations
+
+- Requires SLURM workload manager
+- Depends on custom `file_generator.py` module
+- Designed for LAMMPS + MLIP calculations
+- Single vacancy defects only (no complex defects)
+
+## Contributing
+
+Feel free to submit issues or pull requests for:
+- Additional energy pattern recognition
+- Support for other job schedulers
+- Extended defect types (interstitials, substitutions)
+- Integration with other simulation codes
+
+## License
+
+These scripts are provided as-is for research and educational purposes in computational materials science.
